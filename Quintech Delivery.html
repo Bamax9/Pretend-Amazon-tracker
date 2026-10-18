@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Quintech Delivery</title>
+<style>
+:root{--bg:#0d0b14;--card:#1a1626;--line:#2e2745;--text:#f1eefc;--dim:#a79fc4;--purple:#a855f7;--teal:#2dd4bf;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);color-scheme:dark}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",sans-serif;font-size:17px}
+main{max-width:560px;margin:0 auto;padding:16px}
+header{display:flex;align-items:center;gap:12px;margin-bottom:14px}
+.logo{width:46px;height:46px;border-radius:12px;background:linear-gradient(135deg,var(--purple),var(--teal));display:grid;place-items:center;font-weight:800;font-size:20px;color:#0d0b14}
+h1{font-size:20px;margin:0}
+.sub{color:var(--dim);font-size:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px;margin-bottom:14px}
+.bar{height:14px;background:var(--line);border-radius:8px;overflow:hidden;margin-top:8px}
+.bar>i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--purple),var(--teal));transition:width .3s}
+.stats{display:flex;justify-content:space-between;font-weight:700}
+input[type=text]{width:100%;padding:13px;border-radius:12px;border:1px solid var(--line);background:#120f1c;color:var(--text);font-size:17px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:12px 16px;border-radius:12px;border:0;font-size:16px;font-weight:700;cursor:pointer;color:#0d0b14;background:var(--teal)}
+.btn.p{background:var(--purple);color:#fff}
+.btn.g{background:transparent;color:var(--dim);border:1px solid var(--line)}
+.btn.big{width:100%;font-size:19px;padding:16px;margin-top:10px}
+.row{display:flex;gap:8px;margin-top:10px}
+.row .btn{flex:1}
+.stop{display:flex;align-items:center;gap:12px;padding:10px 0;border-top:1px solid var(--line)}
+.stop:first-child{border-top:0}
+.stop .n{flex:1;min-width:0}
+.stop .n b{display:block;overflow-wrap:anywhere}
+.stop .n span{color:var(--dim);font-size:13px}
+.thumb{width:64px;height:64px;border-radius:10px;object-fit:cover;border:2px solid var(--teal);cursor:pointer}
+.box{width:64px;height:64px;border-radius:10px;border:2px dashed var(--line);display:grid;place-items:center;font-size:26px}
+h2{font-size:16px;margin:0 0 6px;color:var(--dim)}
+.empty{color:var(--dim);padding:8px 0}
+input[type=file]{display:none}
+#toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translate(-50%,120px);background:var(--teal);color:#0d0b14;font-weight:800;padding:12px 18px;border-radius:14px;transition:transform .25s;z-index:5;max-width:90%;text-align:center}
+#toast.on{transform:translate(-50%,0)}
+#view{position:fixed;inset:0;background:rgba(5,3,10,.92);display:none;flex-direction:column;align-items:center;justify-content:center;padding:16px;gap:12px;z-index:6}
+#view.on{display:flex}
+#view img{max-width:100%;max-height:60vh;border-radius:14px;border:2px solid var(--teal)}
+.msg{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px;max-width:420px;text-align:center}
+</style>
+</head>
+<body>
+<main>
+<header><div class="logo">Qt</div><div><h1>Quintech Delivery</h1><div class="sub">Route tracker for booing night</div></div></header>
+
+<div class="card">
+<div class="stats"><span id="done">0 delivered</span><span id="total">0 stops</span></div>
+<div class="bar"><i id="fill"></i></div>
+</div>
+
+<div class="card">
+<input type="text" id="name" placeholder="House number or name (optional)" maxlength="40">
+<label class="btn big">📷 Take photo &amp; deliver<input type="file" accept="image/*" capture="environment" data-id="new"></label>
+<div class="row"><button class="btn p" id="add">➕ Add stop to route</button></div>
+</div>
+
+<div class="card"><h2>📦 Still to deliver</h2><div id="todo"></div></div>
+<div class="card"><h2>✅ Delivered</h2><div id="finished"></div></div>
+
+<div class="card"><button class="btn g" id="reset" style="width:100%">Start a new night</button></div>
+</main>
+
+<div id="toast"></div>
+<div id="view"><div class="msg" id="vmsg"></div><img id="vimg" alt="Delivery photo"><button class="btn p" id="vclose">Close</button></div>
+
+<script>
+var KEY="qt-delivery-v1", stops=[], resetArmed=false;
+try{stops=JSON.parse(localStorage.getItem(KEY)||"[]");if(!Array.isArray(stops))stops=[];}catch(e){stops=[];}
+
+function save(){try{localStorage.setItem(KEY,JSON.stringify(stops));return true;}catch(e){toast("Storage is full. Start a new night soon!");return false;}}
+function esc(s){return String(s).replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c];});}
+function toast(t){var el=document.getElementById("toast");el.textContent=t;el.classList.add("on");clearTimeout(toast.t);toast.t=setTimeout(function(){el.classList.remove("on");},2200);}
+function timeStr(ts){return new Date(ts).toLocaleTimeString([],{hour:"numeric",minute:"2-digit"});}
+
+function compress(file,cb){
+  var img=new Image(),url=URL.createObjectURL(file);
+  img.onload=function(){
+    var m=640,s=Math.min(1,m/Math.max(img.width,img.height)),c=document.createElement("canvas");
+    c.width=Math.round(img.width*s);c.height=Math.round(img.height*s);
+    c.getContext("2d").drawImage(img,0,0,c.width,c.height);
+    URL.revokeObjectURL(url);cb(c.toDataURL("image/jpeg",0.6));
+  };
+  img.onerror=function(){URL.revokeObjectURL(url);toast("Could not read that photo. Try again.");};
+  img.src=url;
+}
+
+function render(){
+  var d=stops.filter(function(s){return s.photo;}),t=stops.filter(function(s){return !s.photo;});
+  document.getElementById("done").textContent=d.length+" delivered";
+  document.getElementById("total").textContent=stops.length+" stops";
+  document.getElementById("fill").style.width=(stops.length?d.length/stops.length*100:0)+"%";
+  var todo=document.getElementById("todo");
+  todo.innerHTML=t.length?"":'<div class="empty">No stops waiting. Add one above!</div>';
+  t.forEach(function(s){
+    var r=document.createElement("div");r.className="stop";
+    r.innerHTML='<div class="box">📦</div><div class="n"><b>'+esc(s.name)+'</b><span>Waiting</span></div>'+
+      '<label class="btn">📷 Deliver<input type="file" accept="image/*" capture="environment" data-id="'+s.id+'"></label>'+
+      '<button class="btn g" data-del="'+s.id+'" aria-label="Remove stop">✕</button>';
+    todo.appendChild(r);
+  });
+  var fin=document.getElementById("finished");
+  fin.innerHTML=d.length?"":'<div class="empty">Nothing delivered yet.</div>';
+  d.slice().reverse().forEach(function(s){
+    var r=document.createElement("div");r.className="stop";
+    r.innerHTML='<img class="thumb" src="'+s.photo+'" data-view="'+s.id+'" alt="Delivery photo"><div class="n"><b>'+esc(s.name)+'</b><span>✓ Delivered at '+timeStr(s.time)+'</span></div>'+
+      '<label class="btn g">Retake<input type="file" accept="image/*" capture="environment" data-id="'+s.id+'"></label>';
+    fin.appendChild(r);
+  });
+}
+
+function addStop(photo){
+  var el=document.getElementById("name"),n=el.value.trim()||("Stop "+(stops.length+1));
+  var s={id:String(Date.now())+Math.floor(Math.random()*99),name:n,photo:photo||null,time:photo?Date.now():null};
+  stops.push(s);el.value="";return s;
+}
+
+document.getElementById("add").onclick=function(){addStop(null);save();render();toast("Stop added to your route");};
+
+document.addEventListener("change",function(e){
+  var inp=e.target;if(inp.type!=="file"||!inp.files[0])return;
+  var id=inp.dataset.id,file=inp.files[0];inp.value="";
+  compress(file,function(data){
+    if(id==="new"){addStop(data);}
+    else{var s=stops.find(function(x){return x.id===id;});if(s){s.photo=data;s.time=Date.now();}}
+    save();render();toast("📦 Delivered! Photo saved.");
+  });
+});
+
+document.addEventListener("click",function(e){
+  var t=e.target;
+  if(t.dataset.del){stops=stops.filter(function(s){return s.id!==t.dataset.del;});save();render();}
+  if(t.dataset.view){
+    var s=stops.find(function(x){return x.id===t.dataset.view;});if(!s)return;
+    document.getElementById("vimg").src=s.photo;
+    document.getElementById("vmsg").innerHTML="📦 <b>Your package was delivered</b><br><span class='sub'>"+esc(s.name)+" • "+timeStr(s.time)+"<br>Left at the front door.</span>";
+    document.getElementById("view").classList.add("on");
+  }
+});
+document.getElementById("vclose").onclick=function(){document.getElementById("view").classList.remove("on");};
+
+document.getElementById("reset").onclick=function(){
+  var b=this;
+  if(!resetArmed){resetArmed=true;b.textContent="Tap again to erase everything";setTimeout(function(){resetArmed=false;b.textContent="Start a new night";},3500);return;}
+  stops=[];save();render();resetArmed=false;b.textContent="Start a new night";toast("Fresh route ready!");
+};
+render();
+</script>
+</body>
+</html>
